@@ -2,6 +2,11 @@ package api.modules;
 
 import java.io.IOException;
 import java.io.StringWriter;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import javax.servlet.annotation.WebServlet;
 
@@ -27,6 +32,11 @@ import uniol.apt.ui.impl.AptReturnValuesTransformer;
 @WebServlet("/api/moduleRunner")
 public class ModuleRunner extends AptServlet {
 
+	/**
+	 * Timeout in seconds after which modules are forcibly stopped.
+	 */
+	private static final long MODULE_TIMEOUT = 5;
+
 	private static final String JSON_FIELD_MODULE_NAME = "moduleName";
 	private static final String JSON_FIELD_PARAMETERS = "moduleParams";
 	private static final String JSON_FIELD_RETURN_VALUES = "moduleReturnValues";
@@ -44,8 +54,9 @@ public class ModuleRunner extends AptServlet {
 			moduleName = requestData.getString(JSON_FIELD_MODULE_NAME);
 			moduleArgs = requestData.getJSONObject(JSON_FIELD_PARAMETERS);
 			return asSuccess(runModule(getModule(moduleName), moduleArgs));
-		} catch (Exception e) {
+		} catch (Throwable e) {
 			JSONObject jsonOut = new JSONObject();
+			jsonOut.put("type", e.getClass().getName());
 			jsonOut.put("message", e.getMessage());
 			return asError(jsonOut);
 		}
@@ -89,13 +100,12 @@ public class ModuleRunner extends AptServlet {
 	 * @param moduleParams
 	 *                module parameter values
 	 * @return module return values
-	 * @throws ModuleException
-	 *                 thrown when an exception occurs during module
-	 *                 execution
+	 * @throws Throwable
+	 *                 exceptions thrown during module execution
 	 */
-	private JSONObject runModule(Module module, JSONObject moduleParams) throws ModuleException {
-		ModuleInputImpl input = ModuleUtils.getModuleInput(module);
-		ModuleOutputImpl output = ModuleUtils.getModuleOutput(module);
+	private JSONObject runModule(final Module module, final JSONObject moduleParams) throws Throwable {
+		final ModuleInputImpl input = ModuleUtils.getModuleInput(module);
+		final ModuleOutputImpl output = ModuleUtils.getModuleOutput(module);
 
 		// Prepare required parameters.
 		for (Parameter param : ModuleUtils.getParameters(module)) {
@@ -121,7 +131,26 @@ public class ModuleRunner extends AptServlet {
 		}
 
 		// Run module.
-		module.run(input, output);
+		Future<?> task = AptServlet.EXECUTOR_SERIVCE.submit(new Callable<Void>() {
+			@Override
+			public Void call() throws Exception {
+				module.run(input, output);
+				return null;
+			}
+		});
+		try {
+			task.get(MODULE_TIMEOUT, TimeUnit.SECONDS);
+		} catch (ExecutionException e) {
+			// Re-throw exception that happened in Module#run
+			throw e.getCause();
+		} catch (TimeoutException e) {
+			// Abort task and re-throw.
+			task.cancel(true);
+			throw e;
+		} catch (InterruptedException e) {
+			// Re-throw.
+			throw e;
+		}
 
 		// Collect return values.
 		JSONObject jsonReturnValues = new JSONObject();
