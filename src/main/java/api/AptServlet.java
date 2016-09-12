@@ -31,9 +31,7 @@ public abstract class AptServlet extends HttpServlet {
 		output.println(jsonResponse.toString());
 	}
 
-	public JSONObject processData(JSONObject requestData) {
-		return null;
-	}
+	public abstract JSONObject processData(JSONObject requestData);
 
 	/**
 	 * Converts the given input stream to a String
