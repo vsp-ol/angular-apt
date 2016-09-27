@@ -14,6 +14,7 @@ import org.json.JSONObject;
 
 import api.AptServlet;
 import uniol.apt.module.AptModuleRegistry;
+import uniol.apt.module.InterruptibleModule;
 import uniol.apt.module.Module;
 import uniol.apt.module.ModuleRegistry;
 import uniol.apt.module.exception.ModuleException;
@@ -29,6 +30,12 @@ import uniol.apt.ui.ReturnValuesTransformer;
 import uniol.apt.ui.impl.AptParametersTransformer;
 import uniol.apt.ui.impl.AptReturnValuesTransformer;
 
+/**
+ * Servlet that allows to execute a module.
+ *
+ * @author Jonas Prellberg
+ *
+ */
 @WebServlet("/api/moduleRunner")
 public class ModuleRunner extends AptServlet {
 
@@ -81,14 +88,17 @@ public class ModuleRunner extends AptServlet {
 	 *                module name to find
 	 * @return the module
 	 * @throws ModuleException
-	 *                 thrown when no module with the name is found
+	 *                 thrown when no module with the name is found or it is
+	 *                 not interruptible and therefore disallowed
 	 */
 	private Module getModule(String moduleName) throws ModuleException {
 		Module module = REGISTRY.findModule(moduleName);
-		if (module != null) {
-			return module;
-		} else {
+		if (module == null) {
 			throw new ModuleException("No such module: " + moduleName);
+		} else if (!(module instanceof InterruptibleModule)) {
+			throw new ModuleException("Module disallowed because it is not interruptible: " + moduleName);
+		} else {
+			return module;
 		}
 	}
 
