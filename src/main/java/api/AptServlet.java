@@ -1,16 +1,17 @@
 package api;
 
-import org.json.JSONObject;
-import org.json.JSONTokener;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.PrintWriter;
 
 import javax.servlet.ServletInputStream;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.PrintWriter;
+
+import org.json.JSONObject;
+import org.json.JSONTokener;
 
 public abstract class AptServlet extends HttpServlet {
 
@@ -31,9 +32,7 @@ public abstract class AptServlet extends HttpServlet {
 		output.println(jsonResponse.toString());
 	}
 
-	public JSONObject processData(JSONObject requestData) {
-		return null;
-	}
+	public abstract JSONObject processData(JSONObject requestData);
 
 	/**
 	 * Converts the given input stream to a String
