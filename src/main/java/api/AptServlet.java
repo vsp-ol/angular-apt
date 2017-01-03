@@ -4,8 +4,6 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 import javax.servlet.ServletInputStream;
 import javax.servlet.http.HttpServlet;
@@ -16,8 +14,6 @@ import org.json.JSONObject;
 import org.json.JSONTokener;
 
 public abstract class AptServlet extends HttpServlet {
-
-	public static ExecutorService EXECUTOR_SERIVCE = Executors.newCachedThreadPool();
 
 	public void doGet(HttpServletRequest request, HttpServletResponse response) {
 		doPost(request, response);

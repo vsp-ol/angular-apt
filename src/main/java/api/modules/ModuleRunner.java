@@ -29,6 +29,8 @@ import uniol.apt.ui.ParametersTransformer;
 import uniol.apt.ui.ReturnValuesTransformer;
 import uniol.apt.ui.impl.AptParametersTransformer;
 import uniol.apt.ui.impl.AptReturnValuesTransformer;
+import uniol.apt.util.interrupt.Interrupter;
+import uniol.apt.util.interrupt.InterrupterRegistry;
 
 /**
  * Servlet that allows to execute a module.
@@ -40,9 +42,9 @@ import uniol.apt.ui.impl.AptReturnValuesTransformer;
 public class ModuleRunner extends AptServlet {
 
 	/**
-	 * Timeout in seconds after which modules are forcibly stopped.
+	 * Timeout in milliseconds after which modules are forcibly stopped.
 	 */
-	private static final long MODULE_TIMEOUT = 5;
+	private static final long MODULE_TIMEOUT = 5000;
 
 	private static final String JSON_FIELD_MODULE_NAME = "moduleName";
 	private static final String JSON_FIELD_PARAMETERS = "moduleParams";
@@ -114,8 +116,8 @@ public class ModuleRunner extends AptServlet {
 	 *                 exceptions thrown during module execution
 	 */
 	private JSONObject runModule(final Module module, final JSONObject moduleParams) throws Throwable {
-		final ModuleInputImpl input = ModuleUtils.getModuleInput(module);
-		final ModuleOutputImpl output = ModuleUtils.getModuleOutput(module);
+		ModuleInputImpl input = ModuleUtils.getModuleInput(module);
+		ModuleOutputImpl output = ModuleUtils.getModuleOutput(module);
 
 		// Prepare required parameters.
 		for (Parameter param : ModuleUtils.getParameters(module)) {
@@ -141,25 +143,12 @@ public class ModuleRunner extends AptServlet {
 		}
 
 		// Run module.
-		Future<?> task = AptServlet.EXECUTOR_SERIVCE.submit(new Callable<Void>() {
-			@Override
-			public Void call() throws Exception {
-				module.run(input, output);
-				return null;
-			}
-		});
+		Interrupter oldInterrupter = InterrupterRegistry.getCurrentThreadInterrupter();
 		try {
-			task.get(MODULE_TIMEOUT, TimeUnit.SECONDS);
-		} catch (ExecutionException e) {
-			// Re-throw exception that happened in Module#run
-			throw e.getCause();
-		} catch (TimeoutException e) {
-			// Abort task and re-throw.
-			task.cancel(true);
-			throw e;
-		} catch (InterruptedException e) {
-			// Re-throw.
-			throw e;
+			InterrupterRegistry.setCurrentThreadInterrupter(new TimeoutInterrupter(MODULE_TIMEOUT, oldInterrupter));
+			module.run(input, output);
+		} finally {
+			InterrupterRegistry.setCurrentThreadInterrupter(oldInterrupter);
 		}
 
 		// Collect return values.
@@ -215,6 +204,23 @@ public class ModuleRunner extends AptServlet {
 		} catch (IOException e) {
 			// Should never happen with a StringWriter.
 			throw new AssertionError();
+		}
+	}
+
+	static private class TimeoutInterrupter implements Interrupter {
+		private final Interrupter chainedInterrupter;
+		private final long endTime;
+
+		private TimeoutInterrupter(long timeout, Interrupter chained) {
+			endTime = System.currentTimeMillis() + timeout;
+			chainedInterrupter = chained;
+		}
+
+		@Override
+		public boolean isInterruptRequested() {
+			if (chainedInterrupter.isInterruptRequested())
+				return true;
+			return System.currentTimeMillis() >= endTime;
 		}
 	}
 
